@@ -1,0 +1,8 @@
+/target/
+/.idea/
+*.iml
+/PDdownload/
+*.txt
+/.settings/
+.classpath
+.project

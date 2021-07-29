@@ -176,7 +176,10 @@ public class IndexServer {
 		for(String filename : filenames) {
 			String filelower=filename.toLowerCase();
 			for(String term : terms) {
-				if(filelower.contains(term.toLowerCase())) {
+				if (term.isEmpty()) {
+					client.emit(queryError,"querying nothing");
+					return;
+				} else if(filelower.contains(term.toLowerCase())) {
 					hits.add(filename);
 				}
 			}
@@ -203,8 +206,7 @@ public class IndexServer {
 		System.exit(-1);
 	}
 	
-	public static void main( String[] args ) throws IOException
-    {
+	public static void main( String[] args ) throws IOException, InterruptedException {
     	// set a nice log format
 		System.setProperty("java.util.logging.SimpleFormatter.format",
                 "[%1$tl:%1$tM:%1$tS:%1$tL] [%4$s] %2$s: %5$s%n");
@@ -212,9 +214,8 @@ public class IndexServer {
     	// parse command line options
         Options options = new Options();
         options.addOption("port",true,"server port, an integer");
-        options.addOption("password",true,"password for server");
+        options.addOption("password",true,"index server password, a string"); 
         
-       
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = null;
         try {
@@ -232,14 +233,23 @@ public class IndexServer {
 			}
         }
         
-        // create a server manager and setup event handlers
-        ServerManager serverManager;
-        
-        if(cmd.hasOption("password")) {
-        	serverManager = new ServerManager(port,cmd.getOptionValue("password"));
-        } else {
-        	serverManager = new ServerManager(port);
-        }
+        /**
+		 * TODO: for Project 2B. Create a "-password" option that reads a string
+		 * password from the user at the command line. Use the
+		 * ServerManager(port,password) initializer (that needs to be created by you in
+		 * ServerMain.java) if the password was given.
+		 */
+
+		ServerManager serverManager;
+		if (cmd.hasOption("password")) {			
+			String[] passInput = cmd.getOptionValues("password");
+			serverManager = new ServerManager(port, passInput[0]);
+		} else {
+			serverManager = new ServerManager(port);
+		}	
+		
+	
+        // create a server manager and setup event handlers      
         
         // event handlers
         // we must define the event handler callbacks BEFORE starting
@@ -281,7 +291,9 @@ public class IndexServer {
         // start up the server
         log.info("PB Index Server starting up");
         serverManager.start();
-        
+
+        serverManager.join();
+        Utils.getInstance().cleanUp();
     }
 
 }

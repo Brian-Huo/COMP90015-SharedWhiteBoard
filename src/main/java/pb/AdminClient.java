@@ -9,6 +9,8 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.Option;
+
 
 import pb.managers.ClientManager;
 import pb.managers.ServerManager;
@@ -16,12 +18,14 @@ import pb.managers.endpoint.Endpoint;
 import pb.utils.Utils;
 
 /**
- * Admin Client main. Parse command line options and provide default values.
- * TODO: For project 2A, modify this client to take command line options
- * -shutdown, -forceShutdown and -vaderShutdown. The client should send the
- * appropriate event over the event protocol and then simply stop the session
- * and terminate. Make sure the client does not send the event until the
- * SESSION_STARTED event has been emitted, etc. And the client should attempt to
+ * TODO: for project 2B. Admin Client main. Parse command line options and
+ * provide default values. Modify this client to take command line options
+ * -shutdown, -force and -vader (explained further below). The client should
+ * emit the appropriate event, either: {@link pb.managers.ServerManager#shutdownServer},
+ * {@link pb.managers.ServerManager#forceShutdownServer} or
+ * {@link pb.managers.ServerManager#vaderShutdownServer} and then simply stop the
+ * session and terminate. Make sure the client does not emit the event until the
+ * sessionStarted event has been emitted, etc. And the client should attempt to
  * cleanly terminate, not just system exit.
  * 
  * @see {@link pb.managers.ClientManager}
@@ -52,10 +56,24 @@ public class AdminClient  {
         Options options = new Options();
         options.addOption("port",true,"server port, an integer");
         options.addOption("host",true,"hostname, a string");
-        options.addOption("shutdown",false,"shutdown the server");
-        options.addOption("force",false,"in conjuction with shutdown, asking sessions to stop");
-        options.addOption("vader",false,"in conjuction with shutdown, closing endpoints immediately");
-        options.addOption("password",true,"password for server");
+        ///////
+        Option optionPass=new Option("password",true,"input the password, a string");
+        optionPass.setArgs(1);
+        options.addOption("shutdown",false,"normal shutdown");
+        options.addOption("force",false,"force shutdown");
+        options.addOption("vader",false,"vader shutdown");
+        
+        options.addOption(optionPass);
+        ///////
+        /*
+		 * TODO for project 2B. Include a command line option to read a secret
+		 * (password) from the user. It can simply be a plain text password entered as a
+		 * command line option. Use "password" as the name of the option, i.e.
+		 * "-password". Add a boolean option (i.e. it does not have an argument) for
+		 * each of the shutdown possibilities: shutdown, force, vader. In otherwords,
+		 * the user would enter -shutdown for just regular shutdown, -shutdown -force
+		 * for force shutdown and -shutdown -vader for vader shutdown.
+		 */
         
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = null;
@@ -80,40 +98,58 @@ public class AdminClient  {
         
         // start up the client
         log.info("PB Client starting up");
-        final CommandLine cmd2 = cmd;
+
         // the client manager will make a connection with the server
         // and the connection will use a thread that prevents the JVM
         // from terminating immediately
         ClientManager clientManager = new ClientManager(host,port);
-        clientManager.on(ClientManager.sessionStarted, (eventArgs)->{
-        	Endpoint endpoint = (Endpoint) eventArgs[0];
-        	if(cmd2.hasOption("shutdown")) {
-        		String password="";
-        		if(cmd2.hasOption("password")) {
-        			password=cmd2.getOptionValue("password");
-        		} else {
-        			System.out.println("using a blank password");
-        		}
-	        	if(cmd2.hasOption("force")) {
-	        		endpoint.emit(ServerManager.forceShutdownServer, password);
-	        	} else if(cmd2.hasOption("vader")) {
-	        		endpoint.emit(ServerManager.vaderShutdownServer, password);
-	        	} else {
-	        		endpoint.emit(ServerManager.shutdownServer, password);
-	        	}
-        	} else {
-        		System.out.println("not shutting down server");
-        	}
-        	// nothing more to do
-        	clientManager.shutdown();
-        }).on(ClientManager.sessionStopped, (eventArgs)->{
-        	log.info("session stopped");
-        }).on(ClientManager.sessionError, (eventArgs)->{
-        	log.info("session stopped in error");
-        });
         clientManager.start();
-        // nothing more to do but wait for client to finish
-        clientManager.join();
+        
+        /*
+		 * TODO for project 2B. Emit an appropriate shutdown event to the server,
+		 * sending the password. Then shutdown the clientManager. The following line
+		 * will wait for the client manager session to stop cleanly (or otherwise).
+		 * Don't forget that you need to modify ServerMain.java to listen for these
+		 * events coming from any client that connects to it.
+		 */
+        //////////////////////       
+    	if (cmd.hasOption("password")) {
+			String[] passAdmin = cmd.getOptionValues("password");
+			//obtaining cmd arguments
+			if (cmd.hasOption("shutdown")) {
+	    		if ( cmd.hasOption("vader")) {
+	    			//force shutdown
+	    			clientManager.on(ClientManager.sessionStarted, (argss)->{
+	    				Endpoint endpoint = (Endpoint)argss[0];
+	    				log.info("emitting vader shutdown event");
+	    				endpoint.emit(ServerManager.vaderShutdownServer, passAdmin[0]);
+	    				clientManager.shutdown();
+	    			});
+	    			
+	    		}else if (cmd.hasOption("force")) {
+	    			//vader shutdown
+	    			clientManager.on(ClientManager.sessionStarted, (argss)->{
+	    				Endpoint endpoint = (Endpoint)argss[0];
+	    				log.info("emitting force shutdown event");
+	    				endpoint.emit(ServerManager.forceShutdownServer, passAdmin[0]);
+	    				clientManager.shutdown();
+	    			});
+	    		}else {
+	    			//normal shutdown
+	    			clientManager.on(ClientManager.sessionStarted, (argss)->{
+	    				Endpoint endpoint = (Endpoint)argss[0];	
+	    				log.info("emit normal shutdown event");
+	    				endpoint.emit(ServerManager.shutdownServer, passAdmin[0]);
+	    				clientManager.shutdown();
+	    			});
+	    		}
+	    	}
+			
+    	} 
+        ///////////////////////
+    	clientManager.join();
         Utils.getInstance().cleanUp();
+        
     }
+
 }
